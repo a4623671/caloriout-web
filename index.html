@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/caloriout-web/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="CaloriOut：飲食紀錄＋AI 營養師">
+  <!-- viewport-fit=cover：讓 iOS 直立手持（standalone）時，底部安全區能自動避開系統列 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CaloriOut">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>CaloriOut</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#FF9EBB">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background-color: #FFF7F0; }
+    body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+    /* 讓 Flutter 畫布填滿整個視窗，避免底部露出白邊 */
+    flt-glass-pane, flutter-view { background-color: #FFF7F0; }
+  </style>
+  <script>
+    // 自動更新：偵測到新的 Service Worker → 立即啟用並重新載入（避免「看不到新版」）
+    // 使用者回報：「版本號更新了，但更新概況是舊的，要整個重開才正常」→
+    // 舊版用 sessionStorage 當旗標，整個分頁只會自動重載「一次」，
+    // 之後的新版本都不會重載（bundle 一直是舊的）。改成每次換版本都重載。
+    if ('serviceWorker' in navigator) {
+      var coCheckSw = function () {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) {
+            r.update().then(function () {
+              if (r.waiting) r.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }).catch(function () {});
+          });
+        }).catch(function () {});
+      };
+      window.addEventListener('load', coCheckSw);
+      // 回到前景／每 5 分鐘再檢查一次 → 不用整個重開也會拿到新版
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') coCheckSw();
+      });
+      setInterval(coCheckSw, 5 * 60 * 1000);
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        // 每次「換到不同版本」都會進來；用頁面層級旗標避免無限重載
+        if (window.__co_swReloading) return;
+        window.__co_swReloading = true;
+        location.reload();
+      });
+    }
+  </script>
+  <script>
+    // 簡易除錯浮層：抓 JS 錯誤/未處理 rejection/console.error。
+    // 預設「不顯示」🐞 浮層；使用者可在「我的設定」開啟（存 localStorage）。
+    // 不論是否顯示都持續收集錯誤，供「回報問題」附上（window.__getDbg）。
+    (function () {
+      var logs = [];
+      function add(kind, msg) {
+        logs.push('[' + kind + '] ' + msg);
+        if (logs.length > 80) logs.shift();
+        var b = document.getElementById('dbgbtn');
+        if (b) b.textContent = '🐞 ' + logs.length;
+        try { console.log('DBG ' + kind + ': ' + msg); } catch (e) {}
+      }
+      window.addEventListener('error', function (e) {
+        add('error', (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || ''));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        add('reject', String(e.reason));
+      });
+      var ce = console.error;
+      console.error = function () {
+        add('console', Array.prototype.map.call(arguments, String).join(' '));
+        ce.apply(console, arguments);
+      };
+
+      function ensureUI() {
+        if (document.getElementById('dbgbtn')) return;
+        var btn = document.createElement('div');
+        btn.id = 'dbgbtn';
+        btn.textContent = '🐞 ' + logs.length;
+        btn.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:rgba(0,0,0,.55);color:#fff;font:12px/1.4 sans-serif;padding:4px 8px;border-radius:12px;opacity:.5';
+        var panel = document.createElement('pre');
+        panel.id = 'dbgpanel';
+        panel.style.cssText = 'display:none;position:fixed;left:8px;right:8px;bottom:40px;max-height:45%;overflow:auto;z-index:99999;background:rgba(0,0,0,.88);color:#8f8;font:11px/1.4 monospace;padding:8px;border-radius:8px;white-space:pre-wrap';
+        btn.onclick = function () {
+          panel.textContent = logs.join('\n') || '(目前沒有錯誤)';
+          panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        };
+        document.body.appendChild(btn);
+        document.body.appendChild(panel);
+      }
+
+      // 供 App（Dart）呼叫：開啟/關閉浮層。**預設不顯示**，只有 App 依設定開啟才出現。
+      window.calorioutSetDebug = function (on) {
+        if (on) {
+          ensureUI();
+          var b = document.getElementById('dbgbtn');
+          if (b) b.style.display = 'block';
+        } else {
+          var b2 = document.getElementById('dbgbtn');
+          var p = document.getElementById('dbgpanel');
+          if (b2) b2.style.display = 'none';
+          if (p) p.style.display = 'none';
+        }
+      };
+
+      window.addEventListener('load', function () {
+        // 讓 App（Dart）可讀取 JS 錯誤，附進「回報問題」
+        window.__getDbg = function () { return logs.join('\n'); };
+        // 不在載入時自動顯示；由 App 啟動後依設定呼叫 calorioutSetDebug
+      });
+    })();
+  </script>
+
+  <style>
+  /* ── 啟動畫面：品牌藍底＋真正的 logo 圖＋朋友們對抗脂肪大軍（SVG＋CSS，零解碼卡頓） ── */
+  #bootLoader{position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:12px;background:#5B8DD0;
+    transition:opacity .45s ease;font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
+  #bootLoader.gone{opacity:0;pointer-events:none}
+  .bl-stage{position:relative;width:260px;height:212px}
+  .bl-ring{position:absolute;left:50%;top:92px;width:150px;height:150px;margin:-75px 0 0 -75px;
+    border-radius:50%;border:4px solid rgba(255,249,241,.7);animation:blRing 2.2s ease-out infinite}
+  @keyframes blRing{0%{transform:scale(.72);opacity:.9}100%{transform:scale(1.12);opacity:0}}
+  .bl-cast{position:absolute;left:0;bottom:0;width:100%;height:110px}
+  .bl-cast .anim{transform-box:fill-box;transform-origin:center}
+  .bl-logo{position:absolute;left:50%;top:22px;width:140px;height:140px;margin-left:-70px;
+    border-radius:32px;filter:drop-shadow(0 10px 14px rgba(60,40,20,.35));animation:blHero 1.6s ease-in-out infinite}
+  @keyframes blHero{0%,100%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-14px) scale(.96,1.06)}
+    55%{transform:translateY(2px) scale(1.05,.93)}70%{transform:translateY(-4px) scale(1,1)}}
+  .bl-pal{animation:blBob 1.3s ease-in-out infinite}
+  .bl-chick{animation:blBob 1.5s .25s ease-in-out infinite}
+  .bl-fats{animation:blRoll 2.6s ease-in-out infinite}
+  .bl-fats2{animation:blRoll2 3.1s ease-in-out infinite}
+  @keyframes blBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  @keyframes blRoll{0%,100%{transform:translate(0,0) rotate(0)}45%{transform:translate(44px,-10px) rotate(150deg)}
+    60%{transform:translate(50px,-12px) rotate(175deg)}}
+  @keyframes blRoll2{0%,100%{transform:translate(0,0) rotate(0)}45%{transform:translate(-44px,-10px) rotate(-150deg)}
+    60%{transform:translate(-50px,-12px) rotate(-175deg)}}
+  .bl-title{font-size:19px;font-weight:800;color:#FFF9F1;letter-spacing:.5px;text-shadow:0 1px 4px rgba(40,60,120,.35)}
+  .bl-bar{width:236px;height:12px;background:rgba(255,255,255,.35);border-radius:9px;overflow:hidden;
+    box-shadow:inset 0 1px 3px rgba(40,60,120,.25);position:relative}
+  .bl-fill{height:100%;width:6%;border-radius:9px;background:linear-gradient(90deg,#FFD180,#FF9A5C);
+    transition:width .45s ease}
+  .bl-pct{font-size:13px;color:#FFE9D2;font-variant-numeric:tabular-nums}
+  .bl-gate{min-height:26px;font-size:16px;font-weight:800;color:#FFF9F1;opacity:0;
+    transition:opacity .4s;text-shadow:0 1px 4px rgba(40,60,120,.4)}
+  #bootLoader.ready{cursor:pointer}
+  #bootLoader.ready .bl-gate{opacity:1;animation:blGatePulse 1.2s ease-in-out infinite}
+  @keyframes blGatePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+  .bl-fact{max-width:290px;min-height:44px;text-align:center;font-size:13px;line-height:1.5;
+    color:#FFF3E4;transition:opacity .5s ease}
+  .bl-hint{font-size:11px;color:#D6E4F7;margin-top:2px}</style>
+</head>
+<body>
+<div id="bootLoader">
+  <div class="bl-stage">
+    <div class="bl-ring"></div>
+    <svg class="bl-cast" viewBox="0 0 260 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- 朋友：花椰菜勇士（logo 家族風：暖深紅描邊＋腮紅＋亮晶晶眼睛） -->
+      <g transform="translate(20,16)"><g class="anim bl-pal">
+        <circle cx="7" cy="14" r="10" fill="#7CCB7C" stroke="#9C4A45" stroke-width="3"/>
+        <circle cx="18" cy="9" r="11" fill="#7CCB7C" stroke="#9C4A45" stroke-width="3"/>
+        <circle cx="29" cy="14" r="10" fill="#7CCB7C" stroke="#9C4A45" stroke-width="3"/>
+        <circle cx="18" cy="24" r="14" fill="#66BB6A" stroke="#9C4A45" stroke-width="3"/>
+        <circle cx="13" cy="23" r="2.6" fill="#6E2F2F"/><circle cx="13.8" cy="22.2" r=".9" fill="#fff"/>
+        <circle cx="23" cy="23" r="2.6" fill="#6E2F2F"/><circle cx="23.8" cy="22.2" r=".9" fill="#fff"/>
+        <ellipse cx="8" cy="29" rx="3.4" ry="2.2" fill="#FF9D9D" opacity=".85"/>
+        <ellipse cx="28" cy="29" rx="3.4" ry="2.2" fill="#FF9D9D" opacity=".85"/>
+        <path d="M14 30q4 4 8 0" stroke="#6E2F2F" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      </g></g>
+      <!-- 朋友：蛋白質小雞 -->
+      <g transform="translate(204,18)"><g class="anim bl-chick">
+        <circle cx="16" cy="22" r="15" fill="#FFD964" stroke="#9C4A45" stroke-width="3"/>
+        <path d="M8 10l3-6 3 5z M16 7l3-6 3 5z" fill="#FFD964" stroke="#9C4A45" stroke-width="2.4" stroke-linejoin="round"/>
+        <circle cx="11" cy="21" r="2.6" fill="#6E2F2F"/><circle cx="11.8" cy="20.2" r=".9" fill="#fff"/>
+        <circle cx="21" cy="21" r="2.6" fill="#6E2F2F"/><circle cx="21.8" cy="20.2" r=".9" fill="#fff"/>
+        <ellipse cx="6" cy="27" rx="3.2" ry="2.1" fill="#FF9D9D" opacity=".85"/>
+        <ellipse cx="26" cy="27" rx="3.2" ry="2.1" fill="#FF9D9D" opacity=".85"/>
+        <path d="M16 25l-4.5 3.5h9z" fill="#F2994A" stroke="#9C4A45" stroke-width="1.6" stroke-linejoin="round"/>
+      </g></g>
+      <!-- 脂肪大軍：從兩側滾向小卡，又被彈回去（反派＝睏睏眼＋嘟嘟嘴） -->
+      <g class="anim bl-fats">
+        <circle cx="34" cy="82" r="17" fill="#C9BFD9" stroke="#7A5F7E" stroke-width="3"/>
+        <path d="M24 79l5 3M34 79l-5 3" stroke="#4A3A52" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M27 90q4-3 8 0" stroke="#4A3A52" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <ellipse cx="22" cy="85" rx="3" ry="2" fill="#E8B4D8" opacity=".8"/>
+      </g>
+      <g class="anim bl-fats2">
+        <circle cx="226" cy="86" r="13" fill="#D5CBE2" stroke="#7A5F7E" stroke-width="3"/>
+        <path d="M218 84l4 2.4M232 84l-4 2.4" stroke="#4A3A52" stroke-width="2" stroke-linecap="round"/>
+        <path d="M221 93q3-2.4 6 0" stroke="#4A3A52" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </g>
+    </svg>
+    <img class="bl-logo" src="icons/loader-logo.png" alt="CaloriOut 小卡" width="140" height="140"/>
+  </div>
+  <div class="bl-title">小卡和朋友們，正在對抗脂肪大軍</div>
+  <div class="bl-bar"><div class="bl-fill" id="blFill"></div></div>
+  <div class="bl-pct" id="blPct">正在準備…</div>
+  <div class="bl-gate" id="blGate"></div>
+  <div class="bl-fact" id="blFact"></div>
+  <div class="bl-hint" id="blHint">首次載入較慢，之後會快很多</div>
+</div>
+
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+
+<script>
+// 啟動畫面：里程碑式進度（瀏覽器沒有可靠的下載百分比 → 標示為估算，平滑補間、上限 90%）
+(function(){
+  var fill=document.getElementById('blFill'), pct=document.getElementById('blPct'),
+      fact=document.getElementById('blFact'), hint=document.getElementById('blHint'),
+      el=document.getElementById('bootLoader');
+  if(!el) return;
+  var facts=[
+    '一杯 500ml 半糖珍奶，熱量約等於一個便當',
+    '睡眠不足時，隔天想吃甜食的衝動會明顯上升',
+    '蔬菜先吃、再吃肉與飯，血糖上升比較平穩',
+    '同樣熱量下，蛋白質最有飽足感',
+    '膳食纖維每天建議 25–35g，多數人只吃到一半',
+    '滷雞腿去皮，可以少約 80 大卡',
+    '喝 300ml 水，能讓下一餐少盛一點',
+    '水果整顆吃比打成果汁好（纖維留著）',
+    '堅果一天一小把就好，熱量密度很高',
+    '吃太快容易過量，一口多嚼幾下',
+    '超商的茶葉蛋＋無糖豆漿，是很好的早餐組合',
+    '飯後散步 10 分鐘，對血糖很有幫助',
+    '原型食物（看得出原本樣子）通常更耐餓',
+    '含糖飲料是液體熱量，最容易被忽略',
+    '肌肉量越高，基礎代謝越好',
+    '宵夜盡量睡前 2–3 小時吃完',
+    '同樣是白飯，放涼後抗性澱粉會多一點',
+    '咖啡因半衰期 5–6 小時，下午那杯還在體內',
+    '體重每天波動 1–2kg 是正常的（水分與食物）',
+    '外食選「蒸、滷、烤」通常比「炸、燴」好',
+    '蔬菜份量用手比：一餐約一個拳頭大',
+    '豆魚蛋肉的順序：豆 → 魚 → 蛋 → 肉',
+    '記錄本身就是最有效的減脂工具之一',
+    '今天的重點不是完美，是比昨天多懂一點'
+  ];
+  var i=Math.floor(Math.random()*facts.length);
+  function showFact(){ fact.style.opacity=0; setTimeout(function(){ fact.textContent='💡 '+facts[i%facts.length]; fact.style.opacity=1; i++; }, 400); }
+  showFact(); setInterval(showFact, 2800); // 5 秒內至少看到 2 條
+
+  var p=6, cap=90, done=false, t0=Date.now(), MINMS=5000; // 至少顯示 5 秒：動畫＋小知識保證被看到
+  function setP(v){ p=Math.max(p, Math.min(v, cap)); fill.style.width=p+'%'; pct.textContent=Math.round(p)+'%'; }
+  var t=setInterval(function(){ if(done) return; setP(p+Math.max(0.6,(cap-p)*0.045)); }, 200);
+  // 里程碑（能拿到的都拿，拿不到也不影響）
+  window.addEventListener('load', function(){ setP(35); });
+  setTimeout(function(){ setP(60); }, 1200);
+  setTimeout(function(){ if(!done) hint.textContent='首次載入較慢，之後會快很多（已快取）'; }, 6000);
+
+  var hasFrame=false, gated=false;
+  function markFrame(){ hasFrame=true; setTimeout(finish, 260); }
+  function finish(){
+    if(done) return; done=true; clearInterval(t);
+    // Flutter 再快也等滿 5 秒才開門；這期間 App 首帧渲染在 loader 底下（z-index 最高），不會提前冒出來
+    var wait=Math.max(0, MINMS-(Date.now()-t0));
+    setTimeout(showGate, wait);
+  }
+  function showGate(){
+    if(gated) return; gated=true;
+    fill.style.width='100%';
+    var g=document.getElementById('blGate');
+    if(hasFrame){ pct.textContent='100%　準備好了！'; g.textContent='👆 按一下進入'; }
+    else { pct.textContent='載入有點久'; g.textContent='🔄 按一下重新載入'; }
+    el.classList.add('ready');
+  }
+  // 開門前點了也沒用；開門後點一下才放行（沒載好就停在動畫頁，不會放你進壞掉的畫面）
+  el.addEventListener('click', function(){
+    if(!gated) return;
+    if(hasFrame){ el.classList.add('gone'); setTimeout(function(){ el.remove(); }, 500); }
+    else location.reload();
+  });
+  // Flutter 首帧出現（flt-glass-pane / flutter-view）→ 準備開門
+  var mo=new MutationObserver(function(){
+    if(document.querySelector('flt-glass-pane,flutter-view,canvas')) markFrame();
+  });
+  mo.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('flutter-first-frame', markFrame);
+  setTimeout(finish, 25000); // 保險：25 秒還沒好就開重試門，不讓使用者乾等
+})();
+</script>
+</body>
+</html>
